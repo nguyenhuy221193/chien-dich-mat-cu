@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chiến Dịch Mắt Cú Tinh Anh - Lá Chắn Từ Chối</title>
+    <!-- Thư viện nhận diện AI của Google (MediaPipe) -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <!-- Thư viện tạo hiệu ứng pháo hoa -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <style>
+        body {
+            margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif;
+            background-color: #1a1a2e; color: white; display: flex;
+            flex-direction: column; align-items: center; overflow: hidden; height: 100vh;
+        }
+        .header {
+            text-align: center; padding: 20px;
+            background: linear-gradient(90deg, #ff8a00, #e52e71);
+            width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 10;
+        }
+        h1 { margin: 0; font-size: 2.2rem; text-transform: uppercase; letter-spacing: 2px;}
+        h2 { margin: 10px 0 0 0; font-size: 1.2rem; font-weight: normal; }
+        .main-container {
+            position: relative; width: 100%; max-width: 800px;
+            flex-grow: 1; display: flex; justify-content: center;
+            align-items: center; padding: 20px;
+        }
+        .input_video { display: none; }
+        .output_canvas {
+            width: 100%; max-height: 70vh; border-radius: 15px;
+            border: 5px solid #4a4e69; transform: scaleX(-1); background-color: #000;
+        }
+        .instruction-panel {
+            position: absolute; bottom: 30px; left: 50%;
+            transform: translateX(-50%); background: rgba(0, 0, 0, 0.7);
+            padding: 15px 30px; border-radius: 30px; border: 2px solid #fff;
+            text-align: center; z-index: 5; width: 80%;
+        }
+        .instruction-text { font-size: 1.5rem; font-weight: bold; color: #fca311; margin: 0;}
+        .loading {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); font-size: 1.5rem; color: #fca311; z-index: 20; text-align: center;
+        }
+        /* Màn hình chúc mừng */
+        .success-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(46, 204, 113, 0.9); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 100;
+            opacity: 0; pointer-events: none; transition: opacity 0.5s ease; border-radius: 15px;
+        }
+        .success-overlay.active { opacity: 1; pointer-events: all; }
+        .success-overlay h2 { font-size: 4rem; margin: 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.4); }
+        .success-overlay p { font-size: 1.5rem; margin-top: 10px; }
+        .btn-restart {
+            margin-top: 30px; padding: 15px 40px; font-size: 1.5rem;
+            background-color: white; color: #2ecc71; border: none;
+            border-radius: 50px; cursor: pointer; font-weight: bold;
+        }
+        .btn-restart:hover { transform: scale(1.05); }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>CHIẾN DỊCH MẮT CÚ TINH ANH</h1>
+        <h2>Trạm Huấn Luyện: LÁ CHẮN TỪ CHỐI</h2>
+    </div>
+
+    <div class="main-container">
+        <div class="loading" id="loading-ui">
+            <div>Đang tải Hệ thống Camera AI...</div>
+            <div style="font-size: 1rem; color: #ccc;">Vui lòng bấm "Cho phép" sử dụng máy ảnh</div>
+        </div>
+
+        <video class="input_video"></video>
+        <div style="position: relative; width: 100%; height: 100%; display: flex; justify-content: center;">
+             <canvas class="output_canvas" width="1280" height="720"></canvas>
+             
+             <div class="success-overlay" id="success-ui">
+                <h2>AN TOÀN!</h2>
+                <p>TỪ CHỐI THÀNH CÔNG</p>
+                <button class="btn-restart" onclick="resetGame()">Tiếp tục thực hành</button>
+            </div>
+        </div>
+        
+        <div class="instruction-panel">
+            <p class="instruction-text" id="instruction-text">
+                Đứng trước camera và giơ hai tay đan chéo (Chữ X) để từ chối!
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const videoElement = document.getElementsByClassName('input_video')[0];
+        const canvasElement = document.getElementsByClassName('output_canvas')[0];
+        const canvasCtx = canvasElement.getContext('2d');
+        const loadingUi = document.getElementById('loading-ui');
+        const successUi = document.getElementById('success-ui');
+        const instructionText = document.getElementById('instruction-text');
+        
+        let isSuccess = false;
+        let aiReady = false;
+
+        // KIỂM TRA QUYỀN CAMERA TRƯỚC TIÊN
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(function(stream) {
+                // Đã được cấp quyền, bắt đầu tải AI
+                startAI();
+            })
+            .catch(function(err) {
+                // Bị từ chối quyền hoặc mở bằng file:///
+                loadingUi.innerHTML = `
+                    <div style="color: #e74c3c; font-size: 2rem;">LỖI CAMERA! 📷❌</div>
+                    <div style="font-size: 1.2rem; margin-top: 15px; color: white;">
+                        1. Vui lòng cấp quyền Camera cho trang web.<br>
+                        2. Không mở bằng dạng "file:///...". Hãy đẩy lên mạng (Vercel) để chạy.
+                    </div>
+                `;
+            });
+
+        function resetGame() {
+            isSuccess = false;
+            successUi.classList.remove('active');
+        }
+
+        function triggerSuccess() {
+            if (isSuccess) return;
+            isSuccess = true;
+            successUi.classList.add('active');
+            
+            var duration = 3000;
+            var end = Date.now() + duration;
+            (function frame() {
+                confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
+                confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
+                if (Date.now() < end) requestAnimationFrame(frame);
+            }());
+        }
+
+        function onResults(results) {
+            if (!aiReady) {
+                loadingUi.style.display = 'none';
+                aiReady = true;
+            }
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.poseLandmarks) {
+                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
+                drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 2});
+
+                if (!isSuccess) {
+                    const leftWrist = results.poseLandmarks[15];
+                    const rightWrist = results.poseLandmarks[16];
+                    const leftElbow = results.poseLandmarks[13];
+                    const rightElbow = results.poseLandmarks[14];
+
+                    if (leftWrist.visibility > 0.5 && rightWrist.visibility > 0.5) {
+                        const armsRaised = (leftWrist.y < leftElbow.y) && (rightWrist.y < rightElbow.y);
+                        const armsCrossed = (leftWrist.x > rightWrist.x);
+                        
+                        if (armsRaised && armsCrossed) {
+                            triggerSuccess();
+                        }
+                    }
+                }
+            }
+            canvasCtx.restore();
+        }
+
+        function startAI() {
+            const pose = new Pose({locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+            }});
+            
+            pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            pose.onResults(onResults);
+
+            const camera = new Camera(videoElement, {
+                onFrame: async () => { await pose.send({image: videoElement}); },
+                width: 1280, height: 720
+            });
+            camera.start();
+        }
+    </script>
+</body>
+</html>
