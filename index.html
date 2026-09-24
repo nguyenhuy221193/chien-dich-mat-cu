@@ -3,119 +3,195 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biệt Đội Mắt Cú - Lá Chắn Từ Chối</title>
+    <title>Biệt Đội Mắt Cú - Tiếp Sức Sinh Tồn</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    
     <style>
         body {
-            margin: 0; padding: 0; font-family: 'Comic Sans MS', 'Chalkboard SE', sans-serif;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white;
-            display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+            margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #111; color: white; display: flex; flex-direction: column; align-items: center; height: 100vh; overflow: hidden;
         }
         .header {
-            text-align: center; padding: 15px; width: 100%;
-            background: rgba(0, 0, 0, 0.5); border-bottom: 4px solid #fca311;
+            display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 10px 40px; box-sizing: border-box; background: #2c3e50; border-bottom: 5px solid #f1c40f; z-index: 10;
         }
-        h1 { margin: 0; font-size: 2.5rem; color: #fca311; text-shadow: 2px 2px 0px #000; }
-        .score-board {
-            font-size: 1.5rem; margin-top: 10px; padding: 5px 20px;
-            background: #e74c3c; border-radius: 20px; display: inline-block;
-        }
-        .main-container {
-            position: relative; width: 95%; max-width: 800px;
-            margin-top: 20px; display: flex; justify-content: center;
-        }
+        .score-box { font-size: 2rem; font-weight: bold; background: #27ae60; padding: 10px 20px; border-radius: 15px; }
+        .timer-box { font-size: 2.5rem; font-weight: bold; color: #e74c3c; background: #fff; padding: 5px 30px; border-radius: 15px; }
+        
+        .game-container { position: relative; width: 100%; max-width: 1000px; flex-grow: 1; display: flex; justify-content: center; align-items: center;}
         .input_video { display: none; }
-        .output_canvas {
-            width: 100%; border-radius: 20px; border: 8px solid #fff;
-            transform: scaleX(-1); background-color: #000; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        .output_canvas { width: 100%; height: 100%; object-fit: cover; border-radius: 15px; transform: scaleX(-1); border: 3px solid #34495e; }
+        
+        /* Hiệu ứng Lá chắn bọc quanh người */
+        .shield {
+            position: absolute; width: 400px; height: 400px; border-radius: 50%;
+            border: 15px solid transparent; transition: 0.1s; pointer-events: none; z-index: 5;
         }
-        .instruction-box {
-            background: #fff; color: #000; padding: 15px 30px; border-radius: 30px;
-            font-size: 1.5rem; font-weight: bold; margin-top: 20px; text-align: center;
-            border: 4px solid #fca311; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        .shield.active { border-color: rgba(52, 152, 219, 0.8); background: rgba(52, 152, 219, 0.2); box-shadow: 0 0 100px rgba(52, 152, 219, 1); }
+        
+        /* Vật phẩm */
+        .item { position: absolute; font-size: 5rem; z-index: 6; user-select: none; text-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        
+        /* Màn hình thông báo */
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8);
+            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100;
         }
-        .success-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(46, 204, 113, 0.9); display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 100;
-            opacity: 0; pointer-events: none; transition: 0.3s; border-radius: 20px;
-        }
-        .success-overlay.active { opacity: 1; pointer-events: all; }
-        .success-title { font-size: 4rem; color: white; text-shadow: 3px 3px 0 #27ae60; margin: 0; }
-        .btn-next {
-            margin-top: 20px; padding: 15px 40px; font-size: 1.5rem; font-family: inherit;
-            background: #f1c40f; color: #000; border: none; border-radius: 50px;
-            cursor: pointer; font-weight: bold; box-shadow: 0 5px 0 #d4ac0d;
-        }
-        .btn-next:active { transform: translateY(5px); box-shadow: none; }
+        .overlay h2 { font-size: 5rem; color: #f1c40f; margin: 0; text-align: center; text-transform: uppercase;}
+        .btn-start { margin-top: 30px; padding: 20px 50px; font-size: 2rem; background: #e74c3c; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; box-shadow: 0 8px 0 #c0392b; }
+        .btn-start:active { transform: translateY(8px); box-shadow: none; }
     </style>
 </head>
 <body>
 
-    <!-- Âm thanh chúc mừng (Dùng link file audio công khai) -->
-    <audio id="win-sound" src="https://actions.google.com/sounds/v1/crowds/crowd_cheer.ogg" preload="auto"></audio>
-
     <div class="header">
-        <h1>🦸 BIỆT ĐỘI MẮT CÚ 🦸</h1>
-        <div class="score-board">Điểm dũng cảm: <span id="score">0</span> 🌟</div>
-    </div>
-
-    <div class="main-container">
-        <video class="input_video"></video>
-        <div style="position: relative; width: 100%;">
-             <canvas class="output_canvas" width="1280" height="720"></canvas>
-             
-             <div class="success-overlay" id="success-ui">
-                <h2 class="success-title">TUYỆT VỜI!</h2>
-                <p style="font-size: 2rem; color: white;">Bạn đã từ chối thành công!</p>
-                <button class="btn-next" onclick="nextStudent()">Học sinh tiếp theo 🚀</button>
-            </div>
+        <div class="score-box">ĐIỂM ĐỘI: <span id="scoreVal">0</span></div>
+        <div class="timer-box">⏱ <span id="timeVal">30</span>s</div>
+        <div style="font-size: 1.2rem;">
+            Táo, Sữa 🍎🥛 ➡️ Đứng yên<br>
+            Kẹo màu, Đồ lạ 🍭🍬 ➡️ Giơ 🙅‍♂️
         </div>
     </div>
 
-    <div class="instruction-box" id="instruction">
-        ⚠️ NGƯỜI LẠ CHO KẸO! Hãy giơ tay đan chéo (Chữ X) để từ chối!
+    <div class="game-container" id="gameArea">
+        <video class="input_video"></video>
+        <canvas class="output_canvas" width="1280" height="720"></canvas>
+        <div class="shield" id="shieldEffect"></div>
+        
+        <!-- Màn hình chờ chuyển lượt -->
+        <div class="overlay" id="startScreen">
+            <h2>BIỆT ĐỘI MẮT CÚ</h2>
+            <p style="font-size: 2rem; color: white;">Chuẩn bị học sinh đầu tiên!</p>
+            <button class="btn-start" onclick="startGame()">BẮT ĐẦU 30 GIÂY</button>
+        </div>
     </div>
 
     <script>
         const videoElement = document.getElementsByClassName('input_video')[0];
         const canvasElement = document.getElementsByClassName('output_canvas')[0];
         const canvasCtx = canvasElement.getContext('2d');
-        const successUi = document.getElementById('success-ui');
-        const scoreElement = document.getElementById('score');
-        const winSound = document.getElementById('win-sound');
+        const shieldEffect = document.getElementById('shieldEffect');
+        const gameArea = document.getElementById('gameArea');
+        const scoreUI = document.getElementById('scoreVal');
+        const timeUI = document.getElementById('timeVal');
+        const startScreen = document.getElementById('startScreen');
+
+        let isShieldActive = false;
+        let score = parseInt(localStorage.getItem('teamScore')) || 0; // Lưu điểm tạm nếu chơi nhiều lượt
+        scoreUI.innerText = score;
         
-        let isSuccess = false;
-        let score = 0;
+        let timeLeft = 30;
+        let gameLoop, timeLoop, spawnLoop;
+        let items = [];
+        let isGameRunning = false;
 
-        // Yêu cầu quyền Camera
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then(startAI)
-            .catch(() => alert("Vui lòng cấp quyền Camera để chơi game!"));
+        // Bẫy thị giác
+        const safeItems = ['🍎', '🥛', '🥪', '🍙', '🍌'];
+        const dangerItems = ['🍭', '🍬', '🍹', '🍄', '💊', '🍟']; // Đồ lạ, nhiều dầu mỡ, màu rực rỡ
 
-        function nextStudent() {
-            isSuccess = false;
-            successUi.classList.remove('active');
+        function startGame() {
+            startScreen.style.display = 'none';
+            timeLeft = 30; timeUI.innerText = timeLeft;
+            items.forEach(i => i.element.remove()); items = [];
+            isGameRunning = true;
+            
+            // Đếm ngược thời gian
+            timeLoop = setInterval(() => {
+                timeLeft--;
+                timeUI.innerText = timeLeft;
+                if (timeLeft <= 0) endGame();
+            }, 1000);
+
+            // Rơi vật phẩm với tốc độ cao hơn (1.5s/vật)
+            spawnLoop = setInterval(spawnItem, 1500); 
+            requestAnimationFrame(updateGame);
         }
 
-        function triggerSuccess() {
-            if (isSuccess) return;
-            isSuccess = true;
-            score += 10; // Cộng 10 điểm
-            scoreElement.innerText = score;
+        function endGame() {
+            isGameRunning = false;
+            clearInterval(timeLoop); clearInterval(spawnLoop);
+            localStorage.setItem('teamScore', score); // Lưu điểm để lượt sau cộng dồn
             
-            // Hiện màn hình chúc mừng & phát âm thanh
-            successUi.classList.add('active');
-            winSound.currentTime = 0;
-            winSound.play().catch(e => console.log("Trình duyệt chặn auto-play âm thanh"));
+            startScreen.style.display = 'flex';
+            startScreen.innerHTML = `
+                <h2 style="color: #2ecc71;">HẾT LƯỢT!</h2>
+                <p style="font-size: 2.5rem; color: white;">Tổng điểm Đội: ${score}</p>
+                <button class="btn-start" onclick="startGame()">HỌC SINH TIẾP THEO</button>
+                <button style="margin-top:20px; padding:10px 20px; background:#333; color:white; border:none; cursor:pointer;" onclick="resetTotalScore()">Reset Điểm (Chuyển Đội)</button>
+            `;
+        }
+
+        function resetTotalScore() {
+            score = 0; localStorage.setItem('teamScore', 0);
+            scoreUI.innerText = score;
+            startScreen.innerHTML = `
+                <h2>BIỆT ĐỘI MẮT CÚ</h2>
+                <p style="font-size: 2rem; color: white;">Đội tiếp theo chuẩn bị!</p>
+                <button class="btn-start" onclick="startGame()">BẮT ĐẦU 30 GIÂY</button>
+            `;
+        }
+
+        function spawnItem() {
+            if (!isGameRunning) return;
+            const isDanger = Math.random() > 0.5; // 50/50 cơ hội rơi đồ nguy hiểm
+            const text = isDanger ? dangerItems[Math.floor(Math.random()*dangerItems.length)] : safeItems[Math.floor(Math.random()*safeItems.length)];
             
-            // Pháo hoa
-            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+            const el = document.createElement('div');
+            el.className = 'item'; el.innerText = text; el.dataset.type = isDanger ? 'danger' : 'safe';
+            
+            // Tính toán vị trí rơi để tránh rìa màn hình
+            const maxLeft = gameArea.offsetWidth - 100;
+            el.style.left = (Math.random() * maxLeft) + 'px';
+            el.style.top = '-100px';
+            
+            gameArea.appendChild(el);
+            items.push({ element: el, y: -100, isDanger: isDanger });
+        }
+
+        function updateGame() {
+            if (!isGameRunning) return;
+            const speed = 8 + ( (30 - timeLeft) / 5 ); // Rơi ngày càng nhanh khi sắp hết giờ
+            const gameRect = gameArea.getBoundingClientRect();
+
+            for (let i = items.length - 1; i >= 0; i--) {
+                let obj = items[i];
+                obj.y += speed;
+                obj.element.style.top = obj.y + 'px';
+
+                const itemRect = obj.element.getBoundingClientRect();
+                
+                // Khi vật đi qua vùng an toàn của lá chắn (giữa màn hình)
+                if (itemRect.bottom > gameRect.height / 2 && itemRect.top < gameRect.height / 1.5) {
+                    if (obj.isDanger && isShieldActive) {
+                        obj.element.innerText = '💥'; // Bắn nổ kẹo
+                        score += 10; scoreUI.innerText = score;
+                        setTimeout(() => obj.element.remove(), 200);
+                        items.splice(i, 1);
+                        continue;
+                    }
+                    if (!obj.isDanger && isShieldActive) {
+                        // Nếu bật khiên với đồ an toàn -> Trừ điểm cảnh cáo (Đánh lừa thị giác)
+                        obj.element.innerText = '❌'; 
+                        score -= 5; scoreUI.innerText = score;
+                        setTimeout(() => obj.element.remove(), 200);
+                        items.splice(i, 1);
+                        continue;
+                    }
+                }
+
+                // Nếu vật rơi qua khỏi màn hình
+                if (itemRect.top > gameRect.height) {
+                    if (obj.isDanger) {
+                        // Bỏ sót kẹo nguy hiểm
+                        score -= 10; scoreUI.innerText = score;
+                    } else {
+                        // Nhận đồ an toàn thành công
+                        score += 10; scoreUI.innerText = score;
+                    }
+                    obj.element.remove();
+                    items.splice(i, 1);
+                }
+            }
+            requestAnimationFrame(updateGame);
         }
 
         function onResults(results) {
@@ -124,36 +200,32 @@
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
             if (results.poseLandmarks) {
-                // Chỉ vẽ đường nối tay để HS nhìn thấy rõ hành động của mình
-                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#fca311', lineWidth: 6});
+                const lw = results.poseLandmarks[15]; const rw = results.poseLandmarks[16];
+                const le = results.poseLandmarks[13]; const re = results.poseLandmarks[14];
 
-                if (!isSuccess) {
-                    const lw = results.poseLandmarks[15]; // Cổ tay trái
-                    const rw = results.poseLandmarks[16]; // Cổ tay phải
-                    const le = results.poseLandmarks[13]; // Khuỷu tay trái
-                    const re = results.poseLandmarks[14]; // Khuỷu tay phải
-
-                    if (lw.visibility > 0.5 && rw.visibility > 0.5) {
-                        const armsRaised = (lw.y < le.y) && (rw.y < re.y);
-                        const armsCrossed = (lw.x > rw.x);
-                        if (armsRaised && armsCrossed) triggerSuccess();
+                if (lw.visibility > 0.5 && rw.visibility > 0.5) {
+                    const armsRaised = (lw.y < le.y) && (rw.y < re.y);
+                    const armsCrossed = (lw.x > rw.x);
+                    
+                    if (armsRaised && armsCrossed) {
+                        shieldEffect.classList.add('active'); isShieldActive = true;
+                    } else {
+                        shieldEffect.classList.remove('active'); isShieldActive = false;
                     }
                 }
             }
             canvasCtx.restore();
         }
 
-        function startAI() {
-            const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
-            pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-            pose.onResults(onResults);
+        const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
+        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        pose.onResults(onResults);
 
-            const camera = new Camera(videoElement, {
-                onFrame: async () => { await pose.send({image: videoElement}); },
-                width: 1280, height: 720
-            });
-            camera.start();
-        }
+        const camera = new Camera(videoElement, {
+            onFrame: async () => { await pose.send({image: videoElement}); }, width: 1280, height: 720
+        });
+        
+        navigator.mediaDevices.getUserMedia({ video: true }).then(() => camera.start());
     </script>
 </body>
 </html>
